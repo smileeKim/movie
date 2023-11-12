@@ -1,112 +1,139 @@
 const express = require("express");
+const path = require("path");
+
 const { open } = require("sqlite");
 const sqlite3 = require("sqlite3");
 
-const path = require("path");
-const dBPath = path.join(__dirname, "moviesData.db");
-
 const app = express();
 app.use(express.json());
+
+const databasePath = path.join(__dirname, "moviesData.db");
+
 let database = null;
 
-const initializeDbSever = async () => {
+const initializeDatabaseServer = async () => {
   try {
     database = await open({
-      filename: dBPath,
+      filename: databasePath,
       driver: sqlite3.Database,
     });
     app.listen(3000, () => {
-      console.log("http://localhost:3000/");
+      console.log("Server Running at http://localhost:3000/");
     });
   } catch (error) {
-    console.log(`Database error is ${error}.`);
+    console.log(`DB error : ${error.message}`);
+    process.exit(1);
   }
 };
 
-initializeDbSever();
+initializeDatabaseServer();
 
-// convert SnakeCase to CamelCase
-const convertSnToCam = (objectMovie) => {
+const convertSnakeCaseToCamelCase = (dbObject) => {
   return {
-    movieName: objectMovie.movie_name,
+    movieId: dbObject.movie_id,
+    directorId: dbObject.director_id,
+    movieName: dbObject.movie_name,
+    leadActor: dbObject.lead_actor,
   };
 };
 
-//Get the details of Movie
+//Returns a list of all movie names in the movie table
+//Here we use get method for return all movie names
 app.get("/movies/", async (request, response) => {
-  const getMovieDetails = `SELECT * FROM movie;`;
-  const getMovieInfo = await database.all(getMovieDetails);
-  response.send(getMovieInfo.map((eachMovie) => convertSnToCam(eachMovie)));
-});
-
-//Create new Movie Details
-app.post("/movies/", async (request, response) => {
-  const getMovie = request.body;
-  const { directorId, movieName, leadActor } = getMovie;
-  const createMovie = `INSERT INTO movie (director_id,movie_name,lead_actor)
-        VALUES(${directorId}, '${movieName}','${leadActor}');`;
-  const movieResponse = await database.run(createMovie);
-  response.send("Movie Successfully Added");
-});
-
-const ConvertMovieDb = (objectItem) => {
-  return {
-    movieId: objectItem.movie_id,
-    directorId: objectItem.director_id,
-    movieName: objectItem.movie_name,
-    leadActor: objectItem.lead_actor,
-  };
-};
-//get a movie from movieId
-app.get("/movies/:movieId/", async (request, response) => {
-  const { movieId } = request.params;
-  const getMoviesFromId = `SELECT * FROM movie WHERE movie_id = ${movieId};`;
-  const movieInfo = await database.get(getMoviesFromId);
-  response.send(ConvertMovieDb(movieInfo));
-});
-
-//update Movie
-app.put("/movies/:movieId/", async (request, response) => {
-  const { movieId } = request.params;
-  const getMovieDetails = request.body;
-  const { directorId, movieName, leadActor } = getMovieDetails;
-  const updateMovieDetails = `UPDATE movie SET director_id = ${directorId},
-  movie_name = '${movieName}', lead_actor = '${leadActor}' WHERE director_id = ${directorId};`;
-  await database.run(updateMovieDetails);
-  response.send("Movie Details Updated");
-});
-
-//Delete Movie
-app.delete("/movies/:movieId/", async (request, response) => {
-  const { movieId } = request.params;
-  const deleteMovieDetails = `delete from movie where movie_id = ${movieId};`;
-  const deleteMovieResponse = await database.run(deleteMovieDetails);
-  response.send("Movie Removed");
-});
-
-// directorsList
-const convertDirectorDetails = (objectItem) => {
-  return {
-    directorId: objectItem.director_id,
-    directorName: objectItem.director_name,
-  };
-};
-
-//get Director Details
-app.get("/directors/", async (request, response) => {
-  const getDirectorDetails = `SELECT * FROM director;`;
-  const directorDetails = await database.all(getDirectorDetails);
+  const getAllMoviesQuery = `SELECT * FROM movie;`;
+  const allMovies = await database.all(getAllMoviesQuery);
   response.send(
-    directorDetails.map((eachDirector) => convertDirectorDetails(eachDirector))
+    allMovies.map((eachMovies) => convertSnakeCaseToCamelCase(eachMovies))
   );
 });
 
-//get the specific director movie
+//Creates a new movie in the movie table. movie_id is auto-incremented
+app.post("/movies/", async (request, response) => {
+  const movieDetails = request.body;
+  const { directorId, movieName, leadActor } = movieDetails;
+  const addMovieQuery = `INSERT INTO movie(director_id,movie_name,lead_actor) VALUES(${directorId}, '${movieName}', '${leadActor}');`;
+  await database.run(addMovieQuery);
+  response.send("Movie Successfully Added");
+});
+
+//Returns a movie based on the movie ID
+app.get("/movies/:movieId/", async (request, response) => {
+  const { movieId } = request.params;
+  const getMovieDetailsBasedOnMovieId = `SELECT * FROM movie WHERE movie_id = ${movieId};`;
+  const movieDetails = await database.get(getMovieDetailsBasedOnMovieId);
+  response.send(convertSnakeCaseToCamelCase(movieDetails));
+});
+
+//Updates the details of a movie in the movie table based on the movie ID
+app.put("/movies/:movieId/", async (request, response) => {
+  const { movieId } = request.params;
+  const movieDetails = request.body;
+  const { directorId, movieName, leadActor } = movieDetails;
+  const updateMovieQuery = `
+            UPDATE 
+               movie
+            SET
+               director_id=${directorId},
+               movie_name='${movieName}',
+               lead_actor='${leadActor}'
+            WHERE
+               movie_id = ${movieId};
+            `;
+  database.run(updateMovieQuery);
+  response.send("Movie Details Updated");
+});
+
+//Deletes a movie from the movie table based on the movie ID
+app.delete("/movies/:movieId/", async (request, response) => {
+  const { movieId } = request.params;
+  const deleteMovieQuery = `
+            DELETE FROM 
+                movie
+            WHERE 
+                movie_id = ${movieId};
+           `;
+  await database.run(deleteMovieQuery);
+  response.send("Movie Removed");
+});
+
+const convertSnakeCaseToCamelCaseInDirectorTable = (dbObject) => {
+  return {
+    directorId: dbObject.director_id,
+    directorName: dbObject.director_name,
+  };
+};
+
+//Returns a list of all directors in the director table
+app.get("/directors/", async (request, response) => {
+  const getAllDirectorDetails = `
+             SELECT
+                 *
+             FROM 
+                director;
+             `;
+  const directorDetails = await database.all(getAllDirectorDetails);
+  response.send(
+    directorDetails.map((eachDirector) =>
+      convertSnakeCaseToCamelCaseInDirectorTable(eachDirector)
+    )
+  );
+});
+
+//Returns a list of all movie names directed by a specific director
 app.get("/directors/:directorId/movies/", async (request, response) => {
   const { directorId } = request.params;
-  const getMovie = `SELECT movie_name as movieName FROM movie WHERE director_id = ${directorId};`;
-  const getSpecificDiMo = await database.all(getMovie);
-  response.send(getSpecificDiMo);
+  const getMovieName = `
+          SELECT 
+              movie_name
+          FROM
+              movie
+          WHERE
+              director_id = ${directorId};
+          `;
+  const movieNameDetails = await database.all(getMovieName);
+  response.send(
+    movieNameDetails.map((eachMovie) => ({ movieName: eachMovie.movie_name }))
+  );
 });
 
 module.exports = app;
