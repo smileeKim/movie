@@ -40,10 +40,10 @@ const convertSnakeCaseToCamelCase = (dbObject) => {
 //Returns a list of all movie names in the movie table
 //Here we use get method for return all movie names
 app.get("/movies/", async (request, response) => {
-  const getAllMoviesQuery = `SELECT * FROM movie;`;
+  const getAllMoviesQuery = `SELECT movie_name FROM movie;`;
   const allMovies = await database.all(getAllMoviesQuery);
   response.send(
-    allMovies.map((eachMovies) => convertSnakeCaseToCamelCase(eachMovies))
+    allMovies.map((eachMovies) => ({ movieName: eachMovies.movie_name }))
   );
 });
 
